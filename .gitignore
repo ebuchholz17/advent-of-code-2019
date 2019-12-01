@@ -1,0 +1,5 @@
+Debug
+*.exe
+*.pdb
+*.obj
+.vs
