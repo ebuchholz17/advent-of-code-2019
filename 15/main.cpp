@@ -42,14 +42,14 @@ struct int64_list {
     int capacity;
 };
 
-void list_push (int64_list *list, int64 value) {
+void listPush (int64_list *list, int64 value) {
     ASSERT(list->numValues < list->capacity);
 
     list->values[list->numValues] = value;
     list->numValues++;
 }
 
-bool list_contains (int64_list *list, int64 value) {
+bool listContains (int64_list *list, int64 value) {
     for (int i = 0; i < list->numValues; ++i) {
         if (list->values[i] == value) {
             return true;
@@ -224,7 +224,7 @@ program_result runProgram (computer *comp) {
                 int64 param1 = program[comp->instructionPointer+1];
                 int64 param1Value = getParameterValue(param1, param1Mode, comp->relativeBase, program);
 
-                list_push(&comp->output, param1Value);
+                listPush(&comp->output, param1Value);
 
                 comp->instructionPointer += 2;
                 return REQUEST_OUTPUT;
@@ -314,6 +314,63 @@ halt:
     return PROGRAM_HALTED;
 }
 
+struct search_node {
+    int x;
+    int y;
+    bool upChecked;
+    bool downChecked;
+    bool leftChecked;
+    bool rightChecked;
+};
+
+struct point {
+    int x;
+    int y;
+};
+
+struct search_node_stack {
+    int capacity;
+    int numValues;
+    search_node *values;
+};
+
+struct point_list {
+    point *values;
+    int numValues;
+    int capacity;
+};
+
+void listPush (point_list *list, point value) {
+    ASSERT(list->numValues < list->capacity);
+
+    list->values[list->numValues] = value;
+    list->numValues++;
+}
+
+bool listContains (point_list *list, point value) {
+    for (int i = 0; i < list->numValues; ++i) {
+        if (list->values[i].x == value.x && list->values[i].y == value.y) {
+            return true;
+        }
+    }
+    return false;
+}
+
+void stackPush (search_node_stack *stack, search_node node) {
+    ASSERT(stack->numValues < stack->capacity);
+
+    stack->values[stack->numValues] = node;
+    stack->numValues++;
+}
+
+search_node stackPop (search_node_stack *stack) {
+    ASSERT(stack->numValues > 0);
+
+    search_node result = stack->values[stack->numValues - 1];
+    stack->numValues--;
+    return result;
+}
+
 int main (int argc, char **argv) {
     memory_arena memory = {};
     memory.capacity = 2 * 1024 * 1024;
@@ -357,10 +414,11 @@ int main (int argc, char **argv) {
 
     // init windows console 
     win_console winConsole;
-    initWinConsole(&winConsole, 1000.0f / 60.0f);
+    float targetFrameRate = 1000.0f / 60.0f;
+    initWinConsole(&winConsole, targetFrameRate);
     setWinConsoleOutputActive(&winConsole);
 
-    int requiredWindowBufferSize = initWinConsoleBuffer(&winConsole, 100, 50);
+    int requiredWindowBufferSize = initWinConsoleBuffer(&winConsole, 90, 46);
     void *windowBuffer = allocateSize(&memory, requiredWindowBufferSize);
     setWindowBufferMemory(&winConsole, windowBuffer);
 
@@ -382,38 +440,127 @@ int main (int argc, char **argv) {
     int yCoord = 0;
     map[(yCoord + mapHalfHeight) * mapWidth + (xCoord + mapHalfWidth)] = '.';
 
-    int windowWidth = 100;
-    int windowHalfWidth = 50;
-    int windowHeight = 50;
-    int windowHalfHeight = 25;
+    int windowWidth = 90;
+    int windowHalfWidth = 45;
+    int windowHeight = 46;
+    int windowHalfHeight = 23;
     char *window = (char *)allocateSize(&memory, windowWidth * windowHeight);
+
+    search_node_stack searchNodeStack = {};
+    searchNodeStack.capacity = 1000;
+    searchNodeStack.values = (search_node *)allocateSize(&memory, searchNodeStack.capacity * sizeof(search_node));
+
+    point_list visitedPoints = {};
+    visitedPoints.capacity = 10000;
+    visitedPoints.values = (point *)allocateSize(&memory, visitedPoints.capacity * sizeof(point));
+
+    point startingPoint = {};
+    startingPoint.x = 0;
+    startingPoint.y = 0;
+    listPush(&visitedPoints, startingPoint);
+
+    search_node startingNode = {};
+    startingNode.x = startingPoint.x;
+    startingNode.y = startingPoint.y;
+    stackPush(&searchNodeStack, startingNode);
 
     bool programRunning = true;
     int lastDirection = 0;
     while (programRunning) {
-        getWinConsoleInput(&winConsole, &input);
-        int direction = -1;
-        if (input.upKey.justPressed) {
-            direction = 1;
-        }
-        if (input.downKey.justPressed) {
-            direction = 2;
-        }
-        if (input.leftKey.justPressed) {
-            direction = 3;
-        }
-        if (input.rightKey.justPressed) {
-            direction = 4;
-        }
+        //getWinConsoleInput(&winConsole, &input);
+        //int direction = -1;
+        //if (input.upKey.justPressed) {
+        //    direction = 1;
+        //}
+        //if (input.downKey.justPressed) {
+        //    direction = 2;
+        //}
+        //if (input.leftKey.justPressed) {
+        //    direction = 3;
+        //}
+        //if (input.rightKey.justPressed) {
+        //    direction = 4;
+        //}
 
         program_result result = REQUEST_INPUT;
 
         result = runProgram(comp);
         switch (result) {
             case REQUEST_INPUT: {
-                if (direction != -1) {
-                    list_push(&comp->input, direction);
-                    lastDirection = direction;
+                int direction = -1;
+                while (true) {
+                    if (searchNodeStack.numValues == 0) {
+                        break;
+                    }
+
+                    search_node currentNode = stackPop(&searchNodeStack);
+                    point nextPoint = {};
+
+                    if (xCoord != currentNode.x || yCoord != currentNode.y) {
+                        stackPush(&searchNodeStack, currentNode);
+                        int yDiff = currentNode.y - yCoord;
+                        int xDiff = currentNode.x - xCoord;
+                        if (yDiff == -1) {
+                            direction = 1;
+                        }
+                        else if (yDiff == 1) {
+                            direction = 2;
+                        }
+                        else if (xDiff == -1) {
+                            direction = 3;
+                        }
+                        else if (xDiff == 1) {
+                            direction = 4;
+                        }
+                    }
+                    else {
+                        if (!currentNode.upChecked) {
+                            currentNode.upChecked = true;
+                            nextPoint.x = currentNode.x;
+                            nextPoint.y = currentNode.y - 1;
+                            if (!listContains(&visitedPoints, nextPoint)) {
+                                direction = 1;
+                                listPush(&visitedPoints, nextPoint);
+                            }
+                        }
+                        if (direction == -1 && !currentNode.downChecked) {
+                            currentNode.downChecked = true;
+                            nextPoint.x = currentNode.x;
+                            nextPoint.y = currentNode.y + 1;
+                            if (!listContains(&visitedPoints, nextPoint)) {
+                                direction = 2;
+                                listPush(&visitedPoints, nextPoint);
+                            }
+                        }
+                        if (direction == -1 && !currentNode.leftChecked) {
+                            currentNode.leftChecked = true;
+                            nextPoint.x = currentNode.x - 1;
+                            nextPoint.y = currentNode.y;
+                            if (!listContains(&visitedPoints, nextPoint)) {
+                                direction = 3;
+                                listPush(&visitedPoints, nextPoint);
+                            }
+                        }
+                        if (direction == -1 && !currentNode.rightChecked) {
+                            currentNode.rightChecked = true;
+                            nextPoint.x = currentNode.x + 1;
+                            nextPoint.y = currentNode.y;
+                            if (!listContains(&visitedPoints, nextPoint)) {
+                                direction = 4;
+                                listPush(&visitedPoints, nextPoint);
+                            }
+                        }
+                    }
+
+                    if (direction == -1) {
+
+                    }
+                    else {
+                        listPush(&comp->input, direction);
+                        lastDirection = direction;
+                        stackPush(&searchNodeStack, currentNode);
+                        break;
+                    }
                 }
             } break;
             case REQUEST_OUTPUT: {
@@ -442,11 +589,21 @@ int main (int argc, char **argv) {
                     map[(newYCoord + mapHalfHeight) * mapWidth + (newXCoord + mapHalfWidth)] = '.';
                     xCoord = newXCoord;
                     yCoord = newYCoord;
+
+                    search_node newNode = {};
+                    newNode.x = xCoord;
+                    newNode.y = yCoord;
+                    stackPush(&searchNodeStack, newNode);
                 }
                 else {
-                    map[(newYCoord + mapHalfHeight) * mapWidth + (newXCoord + mapHalfWidth)] = '*';
+                    map[(newYCoord + mapHalfHeight) * mapWidth + (newXCoord + mapHalfWidth)] = 'O';
                     xCoord = newXCoord;
                     yCoord = newYCoord;
+
+                    search_node newNode = {};
+                    newNode.x = xCoord;
+                    newNode.y = yCoord;
+                    stackPush(&searchNodeStack, newNode);
                 }
             } break;
             case PROGRAM_HALTED: {
@@ -472,7 +629,83 @@ int main (int argc, char **argv) {
         waitForEndOfWinConsoleFrame(&winConsole);
         startWinConsoleFrame(&winConsole);
         winConsoleResetInput(&input);
+
+        if (searchNodeStack.numValues == 0) {
+            break;
+        }
     }
+
+    char *mapCopy = (char *)allocateSize(&memory, mapWidth * mapHeight);
+    bool oxygenSpread = false;
+    int timeStep = 0;
+    for (int i = 0; i < mapHeight; ++i) {
+        for (int j = 0; j < mapWidth; ++j) {
+            mapCopy[i * mapWidth + j] = map[i * mapWidth + j];
+        }
+    }
+    do {
+        oxygenSpread = false;
+        startWinConsoleFrame(&winConsole);
+
+        int xStartCoord = (xCoord + mapHalfWidth) - windowHalfWidth;
+        int xEndCoord = (xCoord + mapHalfWidth) + windowHalfWidth - 1;
+        int yStartCoord = (yCoord + mapHalfHeight) - windowHalfHeight;
+        int yEndCoord = (yCoord + mapHalfHeight) + windowHalfHeight - 1;
+
+        for (int i = 1; i < mapHeight-1; ++i) {
+            for (int j = 1; j < mapWidth-1; ++j) {
+                char letter = map[i * mapWidth + j];
+                if (letter == 'O') {
+                    char upLetter = map[(i-1) * mapWidth + j];
+                    if (upLetter == '.') {
+                        mapCopy[(i-1) * mapWidth + j] = 'O';
+                        oxygenSpread = true;
+                    }
+                    char downLetter = map[(i+1) * mapWidth + j];
+                    if (downLetter == '.') {
+                        mapCopy[(i+1) * mapWidth + j] = 'O';
+                        oxygenSpread = true;
+                    }
+                    char leftLetter = map[i * mapWidth + (j-1)];
+                    if (leftLetter == '.') {
+                        mapCopy[i * mapWidth + (j-1)] = 'O';
+                        oxygenSpread = true;
+                    }
+                    char rightLetter = map[i * mapWidth + (j+1)];
+                    if (rightLetter == '.') {
+                        mapCopy[i * mapWidth + (j+1)] = 'O';
+                        oxygenSpread = true;
+                    }
+                }
+            }
+        }
+
+        for (int i = 0; i < mapHeight; ++i) {
+            for (int j = 0; j < mapWidth; ++j) {
+                map[i * mapWidth + j]= mapCopy[i * mapWidth + j];
+            }
+        }
+
+        for (int i = 0; i < windowHeight; ++i) {
+            for (int j = 0; j < windowWidth; ++j) {
+                window[i * windowWidth + j] = map[((yStartCoord+i) * mapWidth) + (xStartCoord+j)];
+            }
+        }
+
+        writeWinConsoleCharsToWholeScreen(&winConsole, window);
+
+        char timeStepText[10];
+        _itoa_s(timeStep, timeStepText, 10, 10);
+        winConsoleWriteText(&winConsole, timeStepText, 10, 0, 0);
+
+        renderWinConsole(&winConsole);
+        waitForEndOfWinConsoleFrame(&winConsole);
+        if (oxygenSpread) {
+            timeStep += 1;
+        }
+    } while (oxygenSpread);
+
+    while (true) { }
 
     setWinConsoleStandardOutputActive(&winConsole);
     releaseWinConsoleHandles(&winConsole);
