@@ -22,7 +22,7 @@ void *allocateSize (memory_arena *memory, uint64 size) {
 
 int main (int argc, char **argv) {
     memory_arena memory = {};
-    memory.capacity = 100 * 1024 * 1024;
+    memory.capacity = 40 * 1024 * 1024;
     memory.base = malloc(memory.capacity);
 
     int *numbers = (int *)allocateSize(&memory, 10000000 * sizeof(int));
@@ -32,11 +32,10 @@ int main (int argc, char **argv) {
     char *line = (char *)allocateSize(&memory, stringLength);
     fgets(line, stringLength, stdin);
 
-    for (int i = 0; i < 1; ++i) {
+    for (int i = 0; i < 10000; ++i) {
         int inputIndex = 0;
         while (line[inputIndex] != 0) {
             numbers[numNumbers] = line[inputIndex] - '0';
-            //numbers[inputIndex] = line[inputIndex] - '0';
             ++inputIndex;
             ++numNumbers;
         }
@@ -45,38 +44,41 @@ int main (int argc, char **argv) {
 
     int pattern[] = { 0, 1, 0, -1 };
 
-    int *numbersCopy = (int *)allocateSize(&memory, 10000000 * sizeof(int));
-    for (int i = 0; i < 100; ++i) {
-        for (int j = 0; j < numNumbers; ++j) {
-            int sum = 0;
-            int patternIndex = 0;
-            int repeatCount = j+1;
-            int repeatIndex = 0;
-            for (int k = 0; k < numNumbers; ++k) {
-                repeatIndex = (repeatIndex + 1) % repeatCount;
-                if (repeatIndex == 0) {
-                    patternIndex = (patternIndex + 1) % 4;
-                }
-                int multiplyValue = pattern[patternIndex];
-                int newValue = numbers[k] * multiplyValue;
-                sum += newValue;
-            }
-            if (sum < 0) {
-                sum = -sum;
-            }
-            sum = sum % 10;
-            numbersCopy[j] = sum;
-        }
-        for (int j = 0; j < numNumbers; ++j) {
-            numbers[j] = numbersCopy[j];
-        }
-        for (int j = 0; j < numNumbers; ++j) {
-            printf("%d", numbers[j]);
-        }
-        printf("\n");
+    int messageOffset = 0;
+    for (int i = 0; i < 7; ++i) {
+        messageOffset = (10 * messageOffset) + numbers[i];
     }
 
-    for (int i = 0; i < numNumbers; ++i) {
+    //int *numbersCopy = (int *)allocateSize(&memory, 10000000 * sizeof(int));
+    for (int i = 0; i < 100; ++i) {
+        for (int j = numNumbers - 2; j >= messageOffset; --j) {
+            numbers[j] = (numbers[j] + numbers[j+1]) % 10;
+            //int sum = 0;
+            //int patternIndex = 0;
+            //int repeatCount = j+1;
+            //int repeatIndex = 0;
+            //for (int k = 0; k < numNumbers; ++k) {
+            //    repeatIndex = (repeatIndex + 1) % repeatCount;
+            //    if (repeatIndex == 0) {
+            //        patternIndex = (patternIndex + 1) % 4;
+            //    }
+            //    int multiplyValue = pattern[patternIndex];
+            //    int newValue = numbers[k] * multiplyValue;
+            //    sum += newValue;
+            //}
+            //if (sum < 0) {
+            //    sum = -sum;
+            //}
+            //sum = sum % 10;
+            //numbersCopy[j] = sum;
+        }
+        //for (int j = 0; j < numNumbers; ++j) {
+        //    printf("%d", numbers[j]);
+        //}
+        //printf("\n");
+    }
+
+    for (int i = messageOffset; i < messageOffset + 8; ++i) {
         printf("%d", numbers[i]);
     }
     printf("\n");
